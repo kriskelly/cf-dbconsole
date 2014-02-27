@@ -7,16 +7,6 @@ import "os"
 import "regexp"
 import "syscall"
 
-func main() {
-	appName := os.Args[1]
-	uri := GetPostgresConnectionString(appName)
-	fmt.Println("Connecting to the following PostgreSQL url: ", uri)
-	err := ExecPostgres(uri)
-	if err != nil {
-		panic(err)
-	}
-}
-
 var ExecPostgres = func(connectionString string) error {
 	psqlArgs := []string{"psql", connectionString}
 	env := os.Environ()
@@ -62,4 +52,14 @@ var GetPostgresConnectionString = func(appName string) string {
 	credentials := firstDb["credentials"].(map[string]interface{})
 	uri := credentials["uri"].(string)
 	return uri
+}
+
+func main() {
+	appName := os.Args[1]
+	uri := GetPostgresConnectionString(appName)
+	fmt.Println("Connecting to the following PostgreSQL url: ", uri)
+	err := ExecPostgres(uri)
+	if err != nil {
+		panic(err)
+	}
 }
