@@ -31,7 +31,7 @@ var CommandRunner = func(name string, args ...string) string {
 	return string(out)
 }
 
-var GetPostgresConnectionString = func(appName string) string {
+var GetPostgresConnectionString = func(appName string, serviceName string) string {
 	out := CommandRunner("/usr/local/bin/cf", "files", appName, "logs/env.log")
 	r, err := regexp.Compile("VCAP_SERVICES=(.*)")
 	if err != nil {
@@ -40,23 +40,51 @@ var GetPostgresConnectionString = func(appName string) string {
 
 	match := r.FindStringSubmatch(out)
 	matchBytes := []byte(match[1])
-	var servicesJson map[string]interface{}
+	var servicesJson CfServices
 	jsonErr := json.Unmarshal(matchBytes, &servicesJson)
 	if jsonErr != nil {
 		panic(jsonErr)
 	}
 
-	// TODO: Support access to different databases if there are multiple
-	elephantSql := servicesJson["elephantsql-n/a"].([]interface{})
-	firstDb := elephantSql[0].(map[string]interface{})
-	credentials := firstDb["credentials"].(map[string]interface{})
-	uri := credentials["uri"].(string)
-	return uri
+	return findElephantSqlUri(servicesJson, serviceName)
+}
+
+type CfServices struct {
+	ElephantSql []CfDbService `json:"elephantsql-n/a"`
+}
+
+type CfDbService struct {
+	Name        string            `json:"name"`
+	Credentials map[string]string `json:"credentials"`
+}
+
+func findElephantSqlUri(servicesJson CfServices, serviceName string) string {
+	var selectedDb CfDbService
+	elephantSql := servicesJson.ElephantSql
+	// Grab the first database if no service name is given
+	if serviceName == "" {
+		selectedDb = elephantSql[0]
+	} else {
+		for _, dbService := range elephantSql {
+			if dbService.Name == serviceName {
+				selectedDb = dbService
+			}
+		}
+	}
+
+	credentials := selectedDb.Credentials
+	return credentials["uri"]
 }
 
 func main() {
 	appName := os.Args[1]
-	uri := GetPostgresConnectionString(appName)
+	var serviceName string
+	if len(os.Args) > 2 {
+		serviceName = os.Args[2]
+	} else {
+		serviceName = ""
+	}
+	uri := GetPostgresConnectionString(appName, serviceName)
 	fmt.Println("Connecting to the following PostgreSQL url: ", uri)
 	err := ExecPostgres(uri)
 	if err != nil {

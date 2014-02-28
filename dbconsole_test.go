@@ -14,8 +14,17 @@ func TestCanGetPostgresConnectionString(t *testing.T) {
 		return `VCAP_SERVICES={"elephantsql-n/a":[{"name":"production-db2","label":"elephantsql-n/a","tags":[],"plan":"free","credentials":{"uri":"postgres://foobar"}}]}`
 	}
 
-	connectionString := GetPostgresConnectionString("foo")
+	connectionString := GetPostgresConnectionString("foo", "")
 	assert(t, connectionString == "postgres://foobar", "should equal postgres://foobar")
+}
+
+func TestCanGetPostgresConnectionStringForAnyElephantSqlDb(t *testing.T) {
+	CommandRunner = func(name string, args ...string) string {
+		return `VCAP_SERVICES={"elephantsql-n/a":[{"name":"production-db2","label":"elephantsql-n/a","tags":[],"plan":"free","credentials":{"uri":"postgres://foobar"}},{"name":"my-other-db","label":"elephantsql-n/a","tags":[],"plan":"free","credentials":{"uri":"postgres://a-different-db"}}]}`
+	}
+
+	conn := GetPostgresConnectionString("foo", "my-other-db")
+	assert(t, conn == "postgres://a-different-db", "Did not find my-other-db in services", conn)
 }
 
 func TestExecPostgres(t *testing.T) {
@@ -29,7 +38,7 @@ func TestExecPostgres(t *testing.T) {
 }
 
 func TestMain(t *testing.T) {
-	GetPostgresConnectionString = func(appName string) string {
+	GetPostgresConnectionString = func(appName string, serviceName string) string {
 		assert(t, appName == "my-foo-app", "Bad app name")
 		return "postgres://a-random-postgres"
 	}
@@ -39,14 +48,31 @@ func TestMain(t *testing.T) {
 		return errors.New("A random error")
 	}
 
+	originalArgs := os.Args
 	os.Args = append(os.Args, "my-foo-app")
 	defer func() {
 		assert(t, recover() != nil, "Should have panic'ed")
+		os.Args = originalArgs
 	}()
 	main()
 }
 
-func assert(t *testing.T, b bool, message string) {
+func TestMainCanTakeServiceNameAsArg(t *testing.T) {
+	GetPostgresConnectionString = func(appName string, serviceName string) string {
+		assert(t, appName == "my-foo-app", "Bad app name")
+		assert(t, serviceName == "my-db-service", "Did not parse my-db-service arg")
+		return "postgres://a-random-postgres"
+	}
+
+	ExecPostgres = func(conn string) error {
+		return nil
+	}
+
+	os.Args = append(os.Args, "my-foo-app", "my-db-service")
+	main()
+}
+
+func assert(t *testing.T, b bool, message ...string) {
 	if b != true {
 		t.Fatal(message)
 	}
