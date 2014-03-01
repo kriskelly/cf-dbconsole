@@ -31,7 +31,7 @@ var CommandRunner = func(name string, args ...string) string {
 	return string(out)
 }
 
-var GetPostgresConnectionString = func(appName string, serviceName string) string {
+var GetVcapServicesEnv = func(appName string) string {
 	out := CommandRunner("/usr/local/bin/cf", "files", appName, "logs/env.log")
 	r, err := regexp.Compile("VCAP_SERVICES=(.*)")
 	if err != nil {
@@ -39,14 +39,7 @@ var GetPostgresConnectionString = func(appName string, serviceName string) strin
 	}
 
 	match := r.FindStringSubmatch(out)
-	matchBytes := []byte(match[1])
-	var servicesJson CfServices
-	jsonErr := json.Unmarshal(matchBytes, &servicesJson)
-	if jsonErr != nil {
-		panic(jsonErr)
-	}
-
-	return findElephantSqlUri(servicesJson, serviceName)
+	return match[1]
 }
 
 type CfServices struct {
@@ -58,9 +51,26 @@ type CfDbService struct {
 	Credentials map[string]string `json:"credentials"`
 }
 
-func findElephantSqlUri(servicesJson CfServices, serviceName string) string {
+func (s CfDbService) Exec() error {
+	credentials := s.Credentials
+	uri := credentials["uri"]
+	fmt.Println("Connecting to the following PostgreSQL url: ", uri)
+	return ExecPostgres(uri)
+}
+
+var GetServices = func(appName string) CfServices {
+	matchBytes := []byte(GetVcapServicesEnv(appName))
+	var servicesJson CfServices
+	jsonErr := json.Unmarshal(matchBytes, &servicesJson)
+	if jsonErr != nil {
+		panic(jsonErr)
+	}
+	return servicesJson
+}
+
+func findService(services CfServices, serviceName string) CfDbService {
 	var selectedDb CfDbService
-	elephantSql := servicesJson.ElephantSql
+	elephantSql := services.ElephantSql
 	// Grab the first database if no service name is given
 	if serviceName == "" {
 		selectedDb = elephantSql[0]
@@ -71,9 +81,7 @@ func findElephantSqlUri(servicesJson CfServices, serviceName string) string {
 			}
 		}
 	}
-
-	credentials := selectedDb.Credentials
-	return credentials["uri"]
+	return selectedDb
 }
 
 func main() {
@@ -84,9 +92,10 @@ func main() {
 	} else {
 		serviceName = ""
 	}
-	uri := GetPostgresConnectionString(appName, serviceName)
-	fmt.Println("Connecting to the following PostgreSQL url: ", uri)
-	err := ExecPostgres(uri)
+
+	services := GetServices(appName)
+	serviceToUse := findService(services, serviceName)
+	err := serviceToUse.Exec()
 	if err != nil {
 		panic(err)
 	}

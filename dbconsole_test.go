@@ -7,68 +7,77 @@ import (
 	"testing"
 )
 
-func TestCanGetPostgresConnectionString(t *testing.T) {
+func TestCanParseServicesFromCloudfoundry(t *testing.T) {
+	servicesEnvVar := `VCAP_SERVICES={"elephantsql-n/a":[{"name":"production-db2","label":"elephantsql-n/a","tags":[],"plan":"free","credentials":{"uri":"postgres://foobar"}}]}`
 	CommandRunner = func(name string, args ...string) string {
 		assert(t, name == "/usr/local/bin/cf", "Bad path to cf")
 		assert(t, reflect.DeepEqual(args, []string{"files", "foo", "logs/env.log"}), "Bad env variable lookup")
-		return `VCAP_SERVICES={"elephantsql-n/a":[{"name":"production-db2","label":"elephantsql-n/a","tags":[],"plan":"free","credentials":{"uri":"postgres://foobar"}}]}`
+		return servicesEnvVar
 	}
 
-	connectionString := GetPostgresConnectionString("foo", "")
-	assert(t, connectionString == "postgres://foobar", "should equal postgres://foobar")
+	services := GetServices("foo")
+	assert(t, services.ElephantSql[0].Name == "production-db2", services.ElephantSql[0].Name)
+	assert(t, services.ElephantSql[0].Credentials["uri"] == "postgres://foobar", services.ElephantSql[0].Credentials["uri"])
 }
 
-func TestCanGetPostgresConnectionStringForAnyElephantSqlDb(t *testing.T) {
-	CommandRunner = func(name string, args ...string) string {
-		return `VCAP_SERVICES={"elephantsql-n/a":[{"name":"production-db2","label":"elephantsql-n/a","tags":[],"plan":"free","credentials":{"uri":"postgres://foobar"}},{"name":"my-other-db","label":"elephantsql-n/a","tags":[],"plan":"free","credentials":{"uri":"postgres://a-different-db"}}]}`
-	}
+func TestCanExecElephantSqlServices(t *testing.T) {
+	elephantSql := CfDbService{}
+	elephantSql.Credentials = map[string]string{}
+	elephantSql.Credentials["uri"] = "postgres://localhost"
 
-	conn := GetPostgresConnectionString("foo", "my-other-db")
-	assert(t, conn == "postgres://a-different-db", "Did not find my-other-db in services", conn)
-}
-
-func TestExecPostgres(t *testing.T) {
 	CommandExecer = func(argv0 string, argv []string, envv []string) error {
 		assert(t, argv0 == "/usr/local/bin/psql", "Bad path to psql")
+		assert(t, argv[0] == "psql", argv[0])
+		assert(t, argv[1] == "postgres://localhost", argv[1])
 		return errors.New("foo")
 	}
 
-	err := ExecPostgres("postgres://localhost")
+	err := elephantSql.Exec()
 	assert(t, err.Error() == "foo", "error should be foo")
 }
 
-func TestMain(t *testing.T) {
-	GetPostgresConnectionString = func(appName string, serviceName string) string {
-		assert(t, appName == "my-foo-app", "Bad app name")
-		return "postgres://a-random-postgres"
+func TestCanFindServiceByName(t *testing.T) {
+	services := CfServices{}
+	elephantToFind := CfDbService{
+		"babar",
+		map[string]string{
+			"uri": "postgres://localhost",
+		}}
+	elephantToNotFind := CfDbService{}
+	services.ElephantSql = append(services.ElephantSql, elephantToNotFind, elephantToFind)
+	originalGetServices := GetServices
+	GetServices = func(appName string) CfServices {
+		return services
 	}
 
-	ExecPostgres = func(conn string) error {
-		assert(t, conn == "postgres://a-random-postgres", "Not using GetPostgresConnectionString")
-		return errors.New("A random error")
-	}
+	foundService := findService(services, "babar")
+	GetServices = originalGetServices
+	assert(t, foundService.Name == "babar", "Did not find babar")
+}
 
-	originalArgs := os.Args
-	os.Args = append(os.Args, "my-foo-app")
-	defer func() {
-		assert(t, recover() != nil, "Should have panic'ed")
-		os.Args = originalArgs
-	}()
-	main()
+func TestFindsFirstDbByDefault(t *testing.T) {
+	firstService := CfDbService{"first service", nil}
+	secondService := CfDbService{"second service", nil}
+	services := CfServices{
+		[]CfDbService{firstService, secondService},
+	}
+	foundService := findService(services, "")
+	assert(t, foundService.Name == "first service", foundService.Name)
 }
 
 func TestMainCanTakeServiceNameAsArg(t *testing.T) {
-	GetPostgresConnectionString = func(appName string, serviceName string) string {
-		assert(t, appName == "my-foo-app", "Bad app name")
-		assert(t, serviceName == "my-db-service", "Did not parse my-db-service arg")
-		return "postgres://a-random-postgres"
+	GetVcapServicesEnv = func(appName string) string {
+		return `{"elephantsql-n/a":[{"name":"production-db2","label":"elephantsql-n/a","tags":[],"plan":"free","credentials":{"uri":"postgres://foobar"}}, {"name":"babar","label":"elephantsql-n/a","tags":[],"plan":"free","credentials":{"uri":"postgres://babar"}}]}`
 	}
 
-	ExecPostgres = func(conn string) error {
+	CommandExecer = func(argv0 string, argv []string, envv []string) error {
+		assert(t, argv0 == "/usr/local/bin/psql", "Bad psql path", argv0)
+		assert(t, argv[0] == "psql", "Bad argv[0]", argv[0])
+		assert(t, argv[1] == "postgres://babar", "Bad argv[1]", argv[1])
 		return nil
 	}
 
-	os.Args = append(os.Args, "my-foo-app", "my-db-service")
+	os.Args = []string{"console", "my-foo-app", "babar"}
 	main()
 }
 
