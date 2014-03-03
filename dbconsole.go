@@ -7,17 +7,6 @@ import "os"
 import "regexp"
 import "syscall"
 
-func execPostgres(connectionString string) error {
-	psqlArgs := []string{"psql", connectionString}
-	env := os.Environ()
-	psqlPath, pathErr := exec.LookPath("psql")
-	if pathErr != nil {
-		panic(pathErr)
-	}
-	psqlErr := commandExecer(psqlPath, psqlArgs, env)
-	return psqlErr
-}
-
 var commandExecer = func(argv0 string, argv []string, envv []string) error {
 	return syscall.Exec(argv0, argv, envv)
 }
@@ -80,7 +69,14 @@ func (s cfDbService) exec() error {
 	credentials := s.Credentials
 	uri := credentials["uri"]
 	fmt.Println("Connecting to the following PostgreSQL url: ", uri)
-	return execPostgres(uri)
+	psqlArgs := []string{"psql", uri}
+	env := os.Environ()
+	psqlPath, pathErr := exec.LookPath("psql")
+	if pathErr != nil {
+		panic(pathErr)
+	}
+	psqlErr := commandExecer(psqlPath, psqlArgs, env)
+	return psqlErr
 }
 
 func getVcapServicesEnv(appName string) string {
