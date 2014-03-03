@@ -80,11 +80,26 @@ func TestFindsFirstDbByDefault(t *testing.T) {
 	firstService := postgresService{"first service", nil}
 	secondService := postgresService{"second service", nil}
 	services := cfServices{
-		[]postgresService{firstService, secondService},
+		ElephantSql: []postgresService{firstService, secondService},
 	}
 	finder := serviceFinder{services: services}
 	foundService := finder.find("").(postgresService)
 	assert(t, foundService.Name == "first service", foundService.Name)
+}
+
+func TestCanFindClearDbMysqlService(t *testing.T) {
+	servicesEnvVar := `VCAP_SERVICES={"cleardb-n/a":[{"name":"my-cleardb","credentials":{"name":"my-dbname","hostname":"my-hostname","port":"3306","username":"my-user","password":"mypass"}}]}`
+	doer := myCommandDoer{
+		t:               t,
+		runOutput:       servicesEnvVar,
+		expectedRunArgs: []string{"files", "foo", "logs/env.log"},
+		expectedRunName: "/usr/local/bin/cf",
+	}
+	finder := serviceFinder{commandDoer: doer}
+	finder.findAll("foo")
+	actualService := finder.services.ClearDb[0]
+	foundService := finder.find("my-cleardb").(mysqlService)
+	assert(t, actualService.Name == foundService.Name, "should have found my-cleardb")
 }
 
 func TestCanExecMysqlService(t *testing.T) {

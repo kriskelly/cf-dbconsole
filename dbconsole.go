@@ -9,6 +9,7 @@ import "syscall"
 
 type cfServices struct {
 	ElephantSql []postgresService `json:"elephantsql-n/a"`
+	ClearDb     []mysqlService    `json:"cleardb-n/a"`
 }
 
 type postgresService struct {
@@ -28,6 +29,7 @@ type commandDoer interface {
 
 type service interface {
 	exec(doer commandDoer) error
+	name() string
 }
 
 type serviceFinder struct {
@@ -61,14 +63,20 @@ func (sf *serviceFinder) findAll(appName string) {
 }
 
 func (sf serviceFinder) find(serviceName string) service {
-	var selectedDb postgresService
-	elephantSql := sf.services.ElephantSql
+	var selectedDb service
+	allServices := []service{}
+	for _, e := range sf.services.ElephantSql {
+		allServices = append(allServices, e)
+	}
+	for _, m := range sf.services.ClearDb {
+		allServices = append(allServices, m)
+	}
 	// Grab the first database if no service name is given
 	if serviceName == "" {
-		selectedDb = elephantSql[0]
+		selectedDb = allServices[0]
 	} else {
-		for _, dbService := range elephantSql {
-			if dbService.Name == serviceName {
+		for _, dbService := range allServices {
+			if dbService.name() == serviceName {
 				selectedDb = dbService
 			}
 		}
@@ -104,6 +112,10 @@ func (m mysqlService) exec(doer commandDoer) error {
 	return doer.exec(mysqlPath, mysqlArgs, env)
 }
 
+func (m mysqlService) name() string {
+	return m.Name
+}
+
 func (s postgresService) exec(doer commandDoer) error {
 	credentials := s.Credentials
 	uri := credentials["uri"]
@@ -116,6 +128,10 @@ func (s postgresService) exec(doer commandDoer) error {
 	}
 	psqlErr := doer.exec(psqlPath, psqlArgs, env)
 	return psqlErr
+}
+
+func (p postgresService) name() string {
+	return p.Name
 }
 
 func getVcapServicesEnv(doer commandDoer, appName string) string {
