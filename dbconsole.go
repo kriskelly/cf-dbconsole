@@ -7,19 +7,6 @@ import "os"
 import "regexp"
 import "syscall"
 
-var commandExecer = func(argv0 string, argv []string, envv []string) error {
-	return syscall.Exec(argv0, argv, envv)
-}
-
-var commandRunner = func(name string, args ...string) string {
-	envCmd := exec.Command(name, args...)
-	out, err := envCmd.Output()
-	if err != nil {
-		panic(err)
-	}
-	return string(out)
-}
-
 type cfServices struct {
 	ElephantSql []cfDbService `json:"elephantsql-n/a"`
 }
@@ -30,8 +17,8 @@ type cfDbService struct {
 }
 
 type commandDoer interface {
-	exec() error
-	run() string
+	exec(argv0 string, argv []string, envv []string) error
+	run(name string, args ...string) string
 }
 
 type serviceFinder struct {
@@ -39,8 +26,23 @@ type serviceFinder struct {
 	services    cfServices
 }
 
+type cliCommandDoer struct{}
+
+func (c cliCommandDoer) exec(argv0 string, argv []string, envv []string) error {
+	return syscall.Exec(argv0, argv, envv)
+}
+
+func (c cliCommandDoer) run(name string, args ...string) string {
+	envCmd := exec.Command(name, args...)
+	out, err := envCmd.Output()
+	if err != nil {
+		panic(err)
+	}
+	return string(out)
+}
+
 func (sf *serviceFinder) findAll(appName string) {
-	matchBytes := []byte(getVcapServicesEnv(appName))
+	matchBytes := []byte(getVcapServicesEnv(sf.commandDoer, appName))
 	var servicesJson cfServices
 	jsonErr := json.Unmarshal(matchBytes, &servicesJson)
 	if jsonErr != nil {
@@ -65,7 +67,13 @@ func (sf serviceFinder) find(serviceName string) cfDbService {
 	return selectedDb
 }
 
-func (s cfDbService) exec() error {
+func (sf serviceFinder) findAndExec(appName string, serviceName string) error {
+	sf.findAll(appName)
+	serviceToUse := sf.find(serviceName)
+	return serviceToUse.exec(sf.commandDoer)
+}
+
+func (s cfDbService) exec(doer commandDoer) error {
 	credentials := s.Credentials
 	uri := credentials["uri"]
 	fmt.Println("Connecting to the following PostgreSQL url: ", uri)
@@ -75,12 +83,12 @@ func (s cfDbService) exec() error {
 	if pathErr != nil {
 		panic(pathErr)
 	}
-	psqlErr := commandExecer(psqlPath, psqlArgs, env)
+	psqlErr := doer.exec(psqlPath, psqlArgs, env)
 	return psqlErr
 }
 
-func getVcapServicesEnv(appName string) string {
-	out := commandRunner("/usr/local/bin/cf", "files", appName, "logs/env.log")
+func getVcapServicesEnv(doer commandDoer, appName string) string {
+	out := doer.run("/usr/local/bin/cf", "files", appName, "logs/env.log")
 	r, err := regexp.Compile("VCAP_SERVICES=(.*)")
 	if err != nil {
 		panic(err)
@@ -99,10 +107,8 @@ func main() {
 		serviceName = ""
 	}
 
-	finder := serviceFinder{}
-	finder.findAll(appName)
-	serviceToUse := finder.find(serviceName)
-	err := serviceToUse.exec()
+	finder := serviceFinder{commandDoer: cliCommandDoer{}}
+	err := finder.findAndExec(appName, serviceName)
 	if err != nil {
 		panic(err)
 	}

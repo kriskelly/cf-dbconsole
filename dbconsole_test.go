@@ -2,19 +2,44 @@ package main
 
 import (
 	"errors"
-	"os"
-	"reflect"
 	"testing"
 )
 
+type myCommandDoer struct {
+	t                 *testing.T
+	execError         error
+	expectedExecArgv0 string
+	expectedExecArgv  []string
+	expectedRunName   string
+	expectedRunArgs   []string
+	runOutput         string
+}
+
+func (m myCommandDoer) exec(argv0 string, argv []string, envv []string) error {
+	assert(m.t, argv0 == m.expectedExecArgv0, argv0, "should have been", m.expectedExecArgv0)
+	for i, arg := range argv {
+		assert(m.t, arg == m.expectedExecArgv[i], arg, "should have been", m.expectedExecArgv[i])
+	}
+	return m.execError
+}
+
+func (m myCommandDoer) run(name string, args ...string) string {
+	assert(m.t, name == "/usr/local/bin/cf", "Bad path to cf")
+	for i, arg := range args {
+		assert(m.t, arg == m.expectedRunArgs[i], "Should have been ", m.expectedRunArgs[i])
+	}
+	return m.runOutput
+}
+
 func TestCanParseServicesFromCloudfoundry(t *testing.T) {
 	servicesEnvVar := `VCAP_SERVICES={"elephantsql-n/a":[{"name":"production-db2","label":"elephantsql-n/a","tags":[],"plan":"free","credentials":{"uri":"postgres://foobar"}}]}`
-	commandRunner = func(name string, args ...string) string {
-		assert(t, name == "/usr/local/bin/cf", "Bad path to cf")
-		assert(t, reflect.DeepEqual(args, []string{"files", "foo", "logs/env.log"}), "Bad env variable lookup")
-		return servicesEnvVar
-	}
-	finder := serviceFinder{}
+	finder := serviceFinder{
+		commandDoer: myCommandDoer{
+			t:               t,
+			runOutput:       servicesEnvVar,
+			expectedRunArgs: []string{"files", "foo", "logs/env.log"},
+			expectedRunName: "psql",
+		}}
 	finder.findAll("foo")
 	services := finder.services
 	assert(t, services.ElephantSql[0].Name == "production-db2", services.ElephantSql[0].Name)
@@ -26,14 +51,13 @@ func TestCanExecElephantSqlServices(t *testing.T) {
 	elephantSql.Credentials = map[string]string{}
 	elephantSql.Credentials["uri"] = "postgres://localhost"
 
-	commandExecer = func(argv0 string, argv []string, envv []string) error {
-		assert(t, argv0 == "/usr/local/bin/psql", "Bad path to psql")
-		assert(t, argv[0] == "psql", argv[0])
-		assert(t, argv[1] == "postgres://localhost", argv[1])
-		return errors.New("foo")
+	doer := myCommandDoer{
+		t:                 t,
+		execError:         errors.New("foo"),
+		expectedExecArgv0: "/usr/local/bin/psql",
+		expectedExecArgv:  []string{"psql", "postgres://localhost"},
 	}
-
-	err := elephantSql.exec()
+	err := elephantSql.exec(doer)
 	assert(t, err.Error() == "foo", "error should be foo")
 }
 
@@ -64,19 +88,18 @@ func TestFindsFirstDbByDefault(t *testing.T) {
 }
 
 func TestMainCanTakeServiceNameAsArg(t *testing.T) {
-	commandRunner = func(name string, args ...string) string {
-		return `VCAP_SERVICES={"elephantsql-n/a":[{"name":"production-db2","label":"elephantsql-n/a","tags":[],"plan":"free","credentials":{"uri":"postgres://foobar"}}, {"name":"babar","label":"elephantsql-n/a","tags":[],"plan":"free","credentials":{"uri":"postgres://babar"}}]}`
+	doer := myCommandDoer{
+		t:                 t,
+		runOutput:         `VCAP_SERVICES={"elephantsql-n/a":[{"name":"production-db2","label":"elephantsql-n/a","tags":[],"plan":"free","credentials":{"uri":"postgres://foobar"}}, {"name":"babar","label":"elephantsql-n/a","tags":[],"plan":"free","credentials":{"uri":"postgres://babar"}}]}`,
+		expectedRunArgs:   []string{"files", "my-foo-app", "logs/env.log"},
+		expectedRunName:   "psql",
+		execError:         nil,
+		expectedExecArgv0: "/usr/local/bin/psql",
+		expectedExecArgv:  []string{"psql", "postgres://babar"},
 	}
 
-	commandExecer = func(argv0 string, argv []string, envv []string) error {
-		assert(t, argv0 == "/usr/local/bin/psql", "Bad psql path", argv0)
-		assert(t, argv[0] == "psql", "Bad argv[0]", argv[0])
-		assert(t, argv[1] == "postgres://babar", "Bad argv[1]", argv[1])
-		return nil
-	}
-
-	os.Args = []string{"console", "my-foo-app", "babar"}
-	main()
+	finder := serviceFinder{commandDoer: doer}
+	finder.findAndExec("my-foo-app", "babar")
 }
 
 func assert(t *testing.T, b bool, message ...string) {
