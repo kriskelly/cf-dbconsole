@@ -17,8 +17,8 @@ type myCommandDoer struct {
 
 func (m myCommandDoer) exec(argv0 string, argv []string, envv []string) error {
 	assert(m.t, argv0 == m.expectedExecArgv0, argv0, "should have been", m.expectedExecArgv0)
-	for i, arg := range argv {
-		assert(m.t, arg == m.expectedExecArgv[i], arg, "should have been", m.expectedExecArgv[i])
+	for i, expectedArg := range m.expectedExecArgv {
+		assert(m.t, expectedArg == argv[i], argv[i], "should have been", expectedArg)
 	}
 	return m.execError
 }
@@ -85,6 +85,37 @@ func TestFindsFirstDbByDefault(t *testing.T) {
 	finder := serviceFinder{services: services}
 	foundService := finder.find("")
 	assert(t, foundService.Name == "first service", foundService.Name)
+}
+
+func TestCanExecMysqlService(t *testing.T) {
+	service := mysqlService{
+		Name: "my-cleardb",
+		Credentials: map[string]string{
+			"name":     "db-name",
+			"hostname": "mysql-hostname",
+			"port":     "3306",
+			"username": "mysql-username",
+			"password": "garbage-password",
+		},
+	}
+
+	commandDoer := myCommandDoer{
+		expectedExecArgv0: "/usr/local/bin/mysql",
+		expectedExecArgv: []string{
+			"mysql",
+			"-h",
+			"mysql-hostname",
+			"-u",
+			"mysql-username",
+			"-P",
+			"3306",
+			"-pgarbage-password",
+			"-D",
+			"db-name",
+		},
+	}
+
+	service.exec(commandDoer)
 }
 
 func TestMainCanTakeServiceNameAsArg(t *testing.T) {

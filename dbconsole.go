@@ -16,6 +16,11 @@ type cfDbService struct {
 	Credentials map[string]string `json:"credentials"`
 }
 
+type mysqlService struct {
+	Name        string            `json:"name"`
+	Credentials map[string]string `json:"credentials"`
+}
+
 type commandDoer interface {
 	exec(argv0 string, argv []string, envv []string) error
 	run(name string, args ...string) string
@@ -71,6 +76,28 @@ func (sf serviceFinder) findAndExec(appName string, serviceName string) error {
 	sf.findAll(appName)
 	serviceToUse := sf.find(serviceName)
 	return serviceToUse.exec(sf.commandDoer)
+}
+
+func (m mysqlService) exec(doer commandDoer) error {
+	creds := m.Credentials
+	mysqlArgs := []string{
+		"mysql",
+		"-h",
+		creds["hostname"],
+		"-u",
+		creds["username"],
+		"-P",
+		creds["port"],
+		"-p" + creds["password"],
+		"-D",
+		creds["name"],
+	}
+	env := os.Environ()
+	mysqlPath, err := exec.LookPath("mysql")
+	if err != nil {
+		panic(err)
+	}
+	return doer.exec(mysqlPath, mysqlArgs, env)
 }
 
 func (s cfDbService) exec(doer commandDoer) error {
