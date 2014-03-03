@@ -7,22 +7,22 @@ import "os"
 import "regexp"
 import "syscall"
 
-var ExecPostgres = func(connectionString string) error {
+var execPostgres = func(connectionString string) error {
 	psqlArgs := []string{"psql", connectionString}
 	env := os.Environ()
 	psqlPath, pathErr := exec.LookPath("psql")
 	if pathErr != nil {
 		panic(pathErr)
 	}
-	psqlErr := CommandExecer(psqlPath, psqlArgs, env)
+	psqlErr := commandExecer(psqlPath, psqlArgs, env)
 	return psqlErr
 }
 
-var CommandExecer = func(argv0 string, argv []string, envv []string) error {
+var commandExecer = func(argv0 string, argv []string, envv []string) error {
 	return syscall.Exec(argv0, argv, envv)
 }
 
-var CommandRunner = func(name string, args ...string) string {
+var commandRunner = func(name string, args ...string) string {
 	envCmd := exec.Command(name, args...)
 	out, err := envCmd.Output()
 	if err != nil {
@@ -31,8 +31,8 @@ var CommandRunner = func(name string, args ...string) string {
 	return string(out)
 }
 
-var GetVcapServicesEnv = func(appName string) string {
-	out := CommandRunner("/usr/local/bin/cf", "files", appName, "logs/env.log")
+var getVcapServicesEnv = func(appName string) string {
+	out := commandRunner("/usr/local/bin/cf", "files", appName, "logs/env.log")
 	r, err := regexp.Compile("VCAP_SERVICES=(.*)")
 	if err != nil {
 		panic(err)
@@ -42,25 +42,25 @@ var GetVcapServicesEnv = func(appName string) string {
 	return match[1]
 }
 
-type CfServices struct {
-	ElephantSql []CfDbService `json:"elephantsql-n/a"`
+type cfServices struct {
+	ElephantSql []cfDbService `json:"elephantsql-n/a"`
 }
 
-type CfDbService struct {
+type cfDbService struct {
 	Name        string            `json:"name"`
 	Credentials map[string]string `json:"credentials"`
 }
 
-func (s CfDbService) Exec() error {
+func (s cfDbService) Exec() error {
 	credentials := s.Credentials
 	uri := credentials["uri"]
 	fmt.Println("Connecting to the following PostgreSQL url: ", uri)
-	return ExecPostgres(uri)
+	return execPostgres(uri)
 }
 
-var GetServices = func(appName string) CfServices {
-	matchBytes := []byte(GetVcapServicesEnv(appName))
-	var servicesJson CfServices
+var getServices = func(appName string) cfServices {
+	matchBytes := []byte(getVcapServicesEnv(appName))
+	var servicesJson cfServices
 	jsonErr := json.Unmarshal(matchBytes, &servicesJson)
 	if jsonErr != nil {
 		panic(jsonErr)
@@ -68,8 +68,8 @@ var GetServices = func(appName string) CfServices {
 	return servicesJson
 }
 
-func findService(services CfServices, serviceName string) CfDbService {
-	var selectedDb CfDbService
+func findService(services cfServices, serviceName string) cfDbService {
+	var selectedDb cfDbService
 	elephantSql := services.ElephantSql
 	// Grab the first database if no service name is given
 	if serviceName == "" {
@@ -93,7 +93,7 @@ func main() {
 		serviceName = ""
 	}
 
-	services := GetServices(appName)
+	services := getServices(appName)
 	serviceToUse := findService(services, serviceName)
 	err := serviceToUse.Exec()
 	if err != nil {

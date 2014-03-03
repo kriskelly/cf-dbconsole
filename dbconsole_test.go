@@ -9,23 +9,23 @@ import (
 
 func TestCanParseServicesFromCloudfoundry(t *testing.T) {
 	servicesEnvVar := `VCAP_SERVICES={"elephantsql-n/a":[{"name":"production-db2","label":"elephantsql-n/a","tags":[],"plan":"free","credentials":{"uri":"postgres://foobar"}}]}`
-	CommandRunner = func(name string, args ...string) string {
+	commandRunner = func(name string, args ...string) string {
 		assert(t, name == "/usr/local/bin/cf", "Bad path to cf")
 		assert(t, reflect.DeepEqual(args, []string{"files", "foo", "logs/env.log"}), "Bad env variable lookup")
 		return servicesEnvVar
 	}
 
-	services := GetServices("foo")
+	services := getServices("foo")
 	assert(t, services.ElephantSql[0].Name == "production-db2", services.ElephantSql[0].Name)
 	assert(t, services.ElephantSql[0].Credentials["uri"] == "postgres://foobar", services.ElephantSql[0].Credentials["uri"])
 }
 
 func TestCanExecElephantSqlServices(t *testing.T) {
-	elephantSql := CfDbService{}
+	elephantSql := cfDbService{}
 	elephantSql.Credentials = map[string]string{}
 	elephantSql.Credentials["uri"] = "postgres://localhost"
 
-	CommandExecer = func(argv0 string, argv []string, envv []string) error {
+	commandExecer = func(argv0 string, argv []string, envv []string) error {
 		assert(t, argv0 == "/usr/local/bin/psql", "Bad path to psql")
 		assert(t, argv[0] == "psql", argv[0])
 		assert(t, argv[1] == "postgres://localhost", argv[1])
@@ -37,40 +37,40 @@ func TestCanExecElephantSqlServices(t *testing.T) {
 }
 
 func TestCanFindServiceByName(t *testing.T) {
-	services := CfServices{}
-	elephantToFind := CfDbService{
+	services := cfServices{}
+	elephantToFind := cfDbService{
 		"babar",
 		map[string]string{
 			"uri": "postgres://localhost",
 		}}
-	elephantToNotFind := CfDbService{}
+	elephantToNotFind := cfDbService{}
 	services.ElephantSql = append(services.ElephantSql, elephantToNotFind, elephantToFind)
-	originalGetServices := GetServices
-	GetServices = func(appName string) CfServices {
+	originalgetServices := getServices
+	getServices = func(appName string) cfServices {
 		return services
 	}
 
 	foundService := findService(services, "babar")
-	GetServices = originalGetServices
+	getServices = originalgetServices
 	assert(t, foundService.Name == "babar", "Did not find babar")
 }
 
 func TestFindsFirstDbByDefault(t *testing.T) {
-	firstService := CfDbService{"first service", nil}
-	secondService := CfDbService{"second service", nil}
-	services := CfServices{
-		[]CfDbService{firstService, secondService},
+	firstService := cfDbService{"first service", nil}
+	secondService := cfDbService{"second service", nil}
+	services := cfServices{
+		[]cfDbService{firstService, secondService},
 	}
 	foundService := findService(services, "")
 	assert(t, foundService.Name == "first service", foundService.Name)
 }
 
 func TestMainCanTakeServiceNameAsArg(t *testing.T) {
-	GetVcapServicesEnv = func(appName string) string {
+	getVcapServicesEnv = func(appName string) string {
 		return `{"elephantsql-n/a":[{"name":"production-db2","label":"elephantsql-n/a","tags":[],"plan":"free","credentials":{"uri":"postgres://foobar"}}, {"name":"babar","label":"elephantsql-n/a","tags":[],"plan":"free","credentials":{"uri":"postgres://babar"}}]}`
 	}
 
-	CommandExecer = func(argv0 string, argv []string, envv []string) error {
+	commandExecer = func(argv0 string, argv []string, envv []string) error {
 		assert(t, argv0 == "/usr/local/bin/psql", "Bad psql path", argv0)
 		assert(t, argv[0] == "psql", "Bad argv[0]", argv[0])
 		assert(t, argv[1] == "postgres://babar", "Bad argv[1]", argv[1])
