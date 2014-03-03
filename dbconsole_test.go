@@ -72,7 +72,7 @@ func TestCanFindServiceByName(t *testing.T) {
 	services.ElephantSql = append(services.ElephantSql, elephantToNotFind, elephantToFind)
 	finder := serviceFinder{}
 	finder.services = services
-	foundService := finder.find("babar")
+	foundService := finder.find("babar").(postgresService)
 	assert(t, foundService.Name == "babar", "Did not find babar")
 }
 
@@ -83,7 +83,7 @@ func TestFindsFirstDbByDefault(t *testing.T) {
 		[]postgresService{firstService, secondService},
 	}
 	finder := serviceFinder{services: services}
-	foundService := finder.find("")
+	foundService := finder.find("").(postgresService)
 	assert(t, foundService.Name == "first service", foundService.Name)
 }
 

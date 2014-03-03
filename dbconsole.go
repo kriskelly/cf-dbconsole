@@ -26,6 +26,10 @@ type commandDoer interface {
 	run(name string, args ...string) string
 }
 
+type service interface {
+	exec(doer commandDoer) error
+}
+
 type serviceFinder struct {
 	commandDoer commandDoer
 	services    cfServices
@@ -56,7 +60,7 @@ func (sf *serviceFinder) findAll(appName string) {
 	sf.services = servicesJson
 }
 
-func (sf serviceFinder) find(serviceName string) postgresService {
+func (sf serviceFinder) find(serviceName string) service {
 	var selectedDb postgresService
 	elephantSql := sf.services.ElephantSql
 	// Grab the first database if no service name is given
