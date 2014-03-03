@@ -61,10 +61,22 @@ func (sf *serviceFinder) findAll(appName string) {
 }
 
 func (sf serviceFinder) find(serviceName string) cfDbService {
-	return findService(sf.services, serviceName)
+	var selectedDb cfDbService
+	elephantSql := sf.services.ElephantSql
+	// Grab the first database if no service name is given
+	if serviceName == "" {
+		selectedDb = elephantSql[0]
+	} else {
+		for _, dbService := range elephantSql {
+			if dbService.Name == serviceName {
+				selectedDb = dbService
+			}
+		}
+	}
+	return selectedDb
 }
 
-func (s cfDbService) Exec() error {
+func (s cfDbService) exec() error {
 	credentials := s.Credentials
 	uri := credentials["uri"]
 	fmt.Println("Connecting to the following PostgreSQL url: ", uri)
@@ -82,22 +94,6 @@ var getVcapServicesEnv = func(appName string) string {
 	return match[1]
 }
 
-func findService(services cfServices, serviceName string) cfDbService {
-	var selectedDb cfDbService
-	elephantSql := services.ElephantSql
-	// Grab the first database if no service name is given
-	if serviceName == "" {
-		selectedDb = elephantSql[0]
-	} else {
-		for _, dbService := range elephantSql {
-			if dbService.Name == serviceName {
-				selectedDb = dbService
-			}
-		}
-	}
-	return selectedDb
-}
-
 func main() {
 	appName := os.Args[1]
 	var serviceName string
@@ -110,7 +106,7 @@ func main() {
 	finder := serviceFinder{}
 	finder.findAll(appName)
 	serviceToUse := finder.find(serviceName)
-	err := serviceToUse.Exec()
+	err := serviceToUse.exec()
 	if err != nil {
 		panic(err)
 	}

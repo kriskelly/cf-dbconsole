@@ -33,7 +33,7 @@ func TestCanExecElephantSqlServices(t *testing.T) {
 		return errors.New("foo")
 	}
 
-	err := elephantSql.Exec()
+	err := elephantSql.exec()
 	assert(t, err.Error() == "foo", "error should be foo")
 }
 
@@ -58,7 +58,8 @@ func TestFindsFirstDbByDefault(t *testing.T) {
 	services := cfServices{
 		[]cfDbService{firstService, secondService},
 	}
-	foundService := findService(services, "")
+	finder := serviceFinder{services: services}
+	foundService := finder.find("")
 	assert(t, foundService.Name == "first service", foundService.Name)
 }
 
