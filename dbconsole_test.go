@@ -24,7 +24,7 @@ func (m myCommandDoer) exec(argv0 string, argv []string, envv []string) error {
 }
 
 func (m myCommandDoer) run(name string, args ...string) string {
-	assert(m.t, name == "/usr/local/bin/cf", "Bad path to cf")
+	assert(m.t, name == m.expectedRunName, "Bad path to cf")
 	for i, arg := range args {
 		assert(m.t, arg == m.expectedRunArgs[i], "Should have been ", m.expectedRunArgs[i])
 	}
@@ -38,7 +38,7 @@ func TestCanParseServicesFromCloudfoundry(t *testing.T) {
 			t:               t,
 			runOutput:       servicesEnvVar,
 			expectedRunArgs: []string{"files", "foo", "logs/env.log"},
-			expectedRunName: "psql",
+			expectedRunName: "/usr/local/bin/cf",
 		}}
 	finder.findAll("foo")
 	services := finder.services
@@ -92,7 +92,7 @@ func TestMainCanTakeServiceNameAsArg(t *testing.T) {
 		t:                 t,
 		runOutput:         `VCAP_SERVICES={"elephantsql-n/a":[{"name":"production-db2","label":"elephantsql-n/a","tags":[],"plan":"free","credentials":{"uri":"postgres://foobar"}}, {"name":"babar","label":"elephantsql-n/a","tags":[],"plan":"free","credentials":{"uri":"postgres://babar"}}]}`,
 		expectedRunArgs:   []string{"files", "my-foo-app", "logs/env.log"},
-		expectedRunName:   "psql",
+		expectedRunName:   "/usr/local/bin/cf",
 		execError:         nil,
 		expectedExecArgv0: "/usr/local/bin/psql",
 		expectedExecArgv:  []string{"psql", "postgres://babar"},
