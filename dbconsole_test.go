@@ -64,8 +64,8 @@ func TestFindsFirstDbByDefault(t *testing.T) {
 }
 
 func TestMainCanTakeServiceNameAsArg(t *testing.T) {
-	getVcapServicesEnv = func(appName string) string {
-		return `{"elephantsql-n/a":[{"name":"production-db2","label":"elephantsql-n/a","tags":[],"plan":"free","credentials":{"uri":"postgres://foobar"}}, {"name":"babar","label":"elephantsql-n/a","tags":[],"plan":"free","credentials":{"uri":"postgres://babar"}}]}`
+	commandRunner = func(name string, args ...string) string {
+		return `VCAP_SERVICES={"elephantsql-n/a":[{"name":"production-db2","label":"elephantsql-n/a","tags":[],"plan":"free","credentials":{"uri":"postgres://foobar"}}, {"name":"babar","label":"elephantsql-n/a","tags":[],"plan":"free","credentials":{"uri":"postgres://babar"}}]}`
 	}
 
 	commandExecer = func(argv0 string, argv []string, envv []string) error {

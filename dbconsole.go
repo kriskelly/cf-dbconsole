@@ -7,7 +7,7 @@ import "os"
 import "regexp"
 import "syscall"
 
-var execPostgres = func(connectionString string) error {
+func execPostgres(connectionString string) error {
 	psqlArgs := []string{"psql", connectionString}
 	env := os.Environ()
 	psqlPath, pathErr := exec.LookPath("psql")
@@ -83,7 +83,7 @@ func (s cfDbService) exec() error {
 	return execPostgres(uri)
 }
 
-var getVcapServicesEnv = func(appName string) string {
+func getVcapServicesEnv(appName string) string {
 	out := commandRunner("/usr/local/bin/cf", "files", appName, "logs/env.log")
 	r, err := regexp.Compile("VCAP_SERVICES=(.*)")
 	if err != nil {
