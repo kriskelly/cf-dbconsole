@@ -8,10 +8,10 @@ import "regexp"
 import "syscall"
 
 type cfServices struct {
-	ElephantSql []cfDbService `json:"elephantsql-n/a"`
+	ElephantSql []postgresService `json:"elephantsql-n/a"`
 }
 
-type cfDbService struct {
+type postgresService struct {
 	Name        string            `json:"name"`
 	Credentials map[string]string `json:"credentials"`
 }
@@ -56,8 +56,8 @@ func (sf *serviceFinder) findAll(appName string) {
 	sf.services = servicesJson
 }
 
-func (sf serviceFinder) find(serviceName string) cfDbService {
-	var selectedDb cfDbService
+func (sf serviceFinder) find(serviceName string) postgresService {
+	var selectedDb postgresService
 	elephantSql := sf.services.ElephantSql
 	// Grab the first database if no service name is given
 	if serviceName == "" {
@@ -100,7 +100,7 @@ func (m mysqlService) exec(doer commandDoer) error {
 	return doer.exec(mysqlPath, mysqlArgs, env)
 }
 
-func (s cfDbService) exec(doer commandDoer) error {
+func (s postgresService) exec(doer commandDoer) error {
 	credentials := s.Credentials
 	uri := credentials["uri"]
 	fmt.Println("Connecting to the following PostgreSQL url: ", uri)

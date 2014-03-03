@@ -47,7 +47,7 @@ func TestCanParseServicesFromCloudfoundry(t *testing.T) {
 }
 
 func TestCanExecElephantSqlServices(t *testing.T) {
-	elephantSql := cfDbService{}
+	elephantSql := postgresService{}
 	elephantSql.Credentials = map[string]string{}
 	elephantSql.Credentials["uri"] = "postgres://localhost"
 
@@ -63,12 +63,12 @@ func TestCanExecElephantSqlServices(t *testing.T) {
 
 func TestCanFindServiceByName(t *testing.T) {
 	services := cfServices{}
-	elephantToFind := cfDbService{
+	elephantToFind := postgresService{
 		"babar",
 		map[string]string{
 			"uri": "postgres://localhost",
 		}}
-	elephantToNotFind := cfDbService{}
+	elephantToNotFind := postgresService{}
 	services.ElephantSql = append(services.ElephantSql, elephantToNotFind, elephantToFind)
 	finder := serviceFinder{}
 	finder.services = services
@@ -77,10 +77,10 @@ func TestCanFindServiceByName(t *testing.T) {
 }
 
 func TestFindsFirstDbByDefault(t *testing.T) {
-	firstService := cfDbService{"first service", nil}
-	secondService := cfDbService{"second service", nil}
+	firstService := postgresService{"first service", nil}
+	secondService := postgresService{"second service", nil}
 	services := cfServices{
-		[]cfDbService{firstService, secondService},
+		[]postgresService{firstService, secondService},
 	}
 	finder := serviceFinder{services: services}
 	foundService := finder.find("")
