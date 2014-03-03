@@ -14,8 +14,9 @@ func TestCanParseServicesFromCloudfoundry(t *testing.T) {
 		assert(t, reflect.DeepEqual(args, []string{"files", "foo", "logs/env.log"}), "Bad env variable lookup")
 		return servicesEnvVar
 	}
-
-	services := getServices("foo")
+	finder := serviceFinder{}
+	finder.findAll("foo")
+	services := finder.services
 	assert(t, services.ElephantSql[0].Name == "production-db2", services.ElephantSql[0].Name)
 	assert(t, services.ElephantSql[0].Credentials["uri"] == "postgres://foobar", services.ElephantSql[0].Credentials["uri"])
 }
@@ -45,13 +46,9 @@ func TestCanFindServiceByName(t *testing.T) {
 		}}
 	elephantToNotFind := cfDbService{}
 	services.ElephantSql = append(services.ElephantSql, elephantToNotFind, elephantToFind)
-	originalgetServices := getServices
-	getServices = func(appName string) cfServices {
-		return services
-	}
-
-	foundService := findService(services, "babar")
-	getServices = originalgetServices
+	finder := serviceFinder{}
+	finder.services = services
+	foundService := finder.find("babar")
 	assert(t, foundService.Name == "babar", "Did not find babar")
 }
 

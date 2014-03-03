@@ -31,17 +31,6 @@ var commandRunner = func(name string, args ...string) string {
 	return string(out)
 }
 
-var getVcapServicesEnv = func(appName string) string {
-	out := commandRunner("/usr/local/bin/cf", "files", appName, "logs/env.log")
-	r, err := regexp.Compile("VCAP_SERVICES=(.*)")
-	if err != nil {
-		panic(err)
-	}
-
-	match := r.FindStringSubmatch(out)
-	return match[1]
-}
-
 type cfServices struct {
 	ElephantSql []cfDbService `json:"elephantsql-n/a"`
 }
@@ -51,6 +40,30 @@ type cfDbService struct {
 	Credentials map[string]string `json:"credentials"`
 }
 
+type commandDoer interface {
+	exec() error
+	run() string
+}
+
+type serviceFinder struct {
+	commandDoer commandDoer
+	services    cfServices
+}
+
+func (sf *serviceFinder) findAll(appName string) {
+	matchBytes := []byte(getVcapServicesEnv(appName))
+	var servicesJson cfServices
+	jsonErr := json.Unmarshal(matchBytes, &servicesJson)
+	if jsonErr != nil {
+		panic(jsonErr)
+	}
+	sf.services = servicesJson
+}
+
+func (sf serviceFinder) find(serviceName string) cfDbService {
+	return findService(sf.services, serviceName)
+}
+
 func (s cfDbService) Exec() error {
 	credentials := s.Credentials
 	uri := credentials["uri"]
@@ -58,14 +71,15 @@ func (s cfDbService) Exec() error {
 	return execPostgres(uri)
 }
 
-var getServices = func(appName string) cfServices {
-	matchBytes := []byte(getVcapServicesEnv(appName))
-	var servicesJson cfServices
-	jsonErr := json.Unmarshal(matchBytes, &servicesJson)
-	if jsonErr != nil {
-		panic(jsonErr)
+var getVcapServicesEnv = func(appName string) string {
+	out := commandRunner("/usr/local/bin/cf", "files", appName, "logs/env.log")
+	r, err := regexp.Compile("VCAP_SERVICES=(.*)")
+	if err != nil {
+		panic(err)
 	}
-	return servicesJson
+
+	match := r.FindStringSubmatch(out)
+	return match[1]
 }
 
 func findService(services cfServices, serviceName string) cfDbService {
@@ -93,8 +107,9 @@ func main() {
 		serviceName = ""
 	}
 
-	services := getServices(appName)
-	serviceToUse := findService(services, serviceName)
+	finder := serviceFinder{}
+	finder.findAll(appName)
+	serviceToUse := finder.find(serviceName)
 	err := serviceToUse.Exec()
 	if err != nil {
 		panic(err)
