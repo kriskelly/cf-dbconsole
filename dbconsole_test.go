@@ -15,6 +15,10 @@ type myCommandRunner struct {
 	runOutput         string
 }
 
+type outputCommandRunner struct {
+	output string
+}
+
 func (m myCommandRunner) exec(argv0 string, argv []string, envv []string) error {
 	assert(m.t, argv0 == m.expectedExecArgv0, argv0, "should have been", m.expectedExecArgv0)
 	for i, expectedArg := range m.expectedExecArgv {
@@ -24,11 +28,21 @@ func (m myCommandRunner) exec(argv0 string, argv []string, envv []string) error 
 }
 
 func (m myCommandRunner) run(name string, args ...string) string {
-	assert(m.t, name == m.expectedRunName, "Bad path to cf")
-	for i, arg := range args {
-		assert(m.t, arg == m.expectedRunArgs[i], "Should have been ", m.expectedRunArgs[i])
+	if m.expectedRunName != "" {
+		assert(m.t, name == m.expectedRunName, "Bad path to cf")
+	}
+	for i, expectedArg := range m.expectedRunArgs {
+		assert(m.t, expectedArg == args[i], args[i], "should have been ", expectedArg)
 	}
 	return m.runOutput
+}
+
+func (o outputCommandRunner) run(name string, args ...string) string {
+	return o.output
+}
+
+func (o outputCommandRunner) exec(argv0 string, argv []string, envv []string) error {
+	panic("Should not be called")
 }
 
 func TestCanParseServicesFromCloudfoundry(t *testing.T) {
@@ -127,6 +141,44 @@ func TestCanExecMysqlService(t *testing.T) {
 			"-pgarbage-password",
 			"-D",
 			"db-name",
+		},
+	}
+
+	service.exec(commandRunner)
+}
+
+func TestCanFindRedisCloudService(t *testing.T) {
+	runner := outputCommandRunner{
+		output: `VCAP_SERVICES={"rediscloud-n/a":[{"name":"my-redis","credentials":{"port":"17089","hostname":"redis-host","password":"redis-pass"}}]}`,
+	}
+	finder := serviceFinder{
+		commandRunner: runner,
+	}
+	finder.findAll("foo")
+	foundService := finder.find("my-redis")
+	assert(t, foundService.name() == "my-redis", "Did not find service")
+}
+
+func TestCanExecRedisService(t *testing.T) {
+	service := redisService{
+		Credentials: map[string]string{
+			"hostname": "redis-hostname.com",
+			"port":     "17089",
+			"password": "redis-password",
+		},
+	}
+
+	commandRunner := myCommandRunner{
+		t:                 t,
+		expectedExecArgv0: "/usr/local/bin/redis-cli",
+		expectedExecArgv: []string{
+			"/usr/local/bin/redis-cli",
+			"-p",
+			"17089",
+			"-h",
+			"redis-hostname.com",
+			"-a",
+			"redis-password",
 		},
 	}
 

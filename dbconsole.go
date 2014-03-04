@@ -10,6 +10,7 @@ import "syscall"
 type cfServices struct {
 	ElephantSql []postgresService `json:"elephantsql-n/a"`
 	ClearDb     []mysqlService    `json:"cleardb-n/a"`
+	RedisCloud  []redisService    `json:"rediscloud-n/a"`
 }
 
 type postgresService struct {
@@ -18,6 +19,11 @@ type postgresService struct {
 }
 
 type mysqlService struct {
+	Name        string            `json:"name"`
+	Credentials map[string]string `json:"credentials"`
+}
+
+type redisService struct {
 	Name        string            `json:"name"`
 	Credentials map[string]string `json:"credentials"`
 }
@@ -70,6 +76,9 @@ func (sf serviceFinder) find(serviceName string) service {
 	}
 	for _, m := range sf.services.ClearDb {
 		allServices = append(allServices, m)
+	}
+	for _, r := range sf.services.RedisCloud {
+		allServices = append(allServices, r)
 	}
 	// Grab the first database if no service name is given
 	if serviceName == "" {
@@ -132,6 +141,28 @@ func (s postgresService) exec(runner commandRunner) error {
 
 func (p postgresService) name() string {
 	return p.Name
+}
+
+func (r redisService) exec(runner commandRunner) error {
+	path, err := exec.LookPath("redis-cli")
+	if err != nil {
+		panic(err)
+	}
+	env := os.Environ()
+	args := []string{
+		path,
+		"-p",
+		r.Credentials["port"],
+		"-h",
+		r.Credentials["hostname"],
+		"-a",
+		r.Credentials["password"],
+	}
+	return runner.exec(path, args, env)
+}
+
+func (r redisService) name() string {
+	return r.Name
 }
 
 func getVcapServicesEnv(runner commandRunner, appName string) string {
