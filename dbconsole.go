@@ -22,28 +22,28 @@ type mysqlService struct {
 	Credentials map[string]string `json:"credentials"`
 }
 
-type commandDoer interface {
+type commandRunner interface {
 	exec(argv0 string, argv []string, envv []string) error
 	run(name string, args ...string) string
 }
 
 type service interface {
-	exec(doer commandDoer) error
+	exec(runner commandRunner) error
 	name() string
 }
 
 type serviceFinder struct {
-	commandDoer commandDoer
-	services    cfServices
+	commandRunner commandRunner
+	services      cfServices
 }
 
-type cliCommandDoer struct{}
+type cliCommandRunner struct{}
 
-func (c cliCommandDoer) exec(argv0 string, argv []string, envv []string) error {
+func (c cliCommandRunner) exec(argv0 string, argv []string, envv []string) error {
 	return syscall.Exec(argv0, argv, envv)
 }
 
-func (c cliCommandDoer) run(name string, args ...string) string {
+func (c cliCommandRunner) run(name string, args ...string) string {
 	envCmd := exec.Command(name, args...)
 	out, err := envCmd.Output()
 	if err != nil {
@@ -53,7 +53,7 @@ func (c cliCommandDoer) run(name string, args ...string) string {
 }
 
 func (sf *serviceFinder) findAll(appName string) {
-	matchBytes := []byte(getVcapServicesEnv(sf.commandDoer, appName))
+	matchBytes := []byte(getVcapServicesEnv(sf.commandRunner, appName))
 	var servicesJson cfServices
 	jsonErr := json.Unmarshal(matchBytes, &servicesJson)
 	if jsonErr != nil {
@@ -87,10 +87,10 @@ func (sf serviceFinder) find(serviceName string) service {
 func (sf serviceFinder) findAndExec(appName string, serviceName string) error {
 	sf.findAll(appName)
 	serviceToUse := sf.find(serviceName)
-	return serviceToUse.exec(sf.commandDoer)
+	return serviceToUse.exec(sf.commandRunner)
 }
 
-func (m mysqlService) exec(doer commandDoer) error {
+func (m mysqlService) exec(runner commandRunner) error {
 	creds := m.Credentials
 	mysqlArgs := []string{
 		"mysql",
@@ -109,14 +109,14 @@ func (m mysqlService) exec(doer commandDoer) error {
 	if err != nil {
 		panic(err)
 	}
-	return doer.exec(mysqlPath, mysqlArgs, env)
+	return runner.exec(mysqlPath, mysqlArgs, env)
 }
 
 func (m mysqlService) name() string {
 	return m.Name
 }
 
-func (s postgresService) exec(doer commandDoer) error {
+func (s postgresService) exec(runner commandRunner) error {
 	credentials := s.Credentials
 	uri := credentials["uri"]
 	fmt.Println("Connecting to the following PostgreSQL url: ", uri)
@@ -126,7 +126,7 @@ func (s postgresService) exec(doer commandDoer) error {
 	if pathErr != nil {
 		panic(pathErr)
 	}
-	psqlErr := doer.exec(psqlPath, psqlArgs, env)
+	psqlErr := runner.exec(psqlPath, psqlArgs, env)
 	return psqlErr
 }
 
@@ -134,8 +134,8 @@ func (p postgresService) name() string {
 	return p.Name
 }
 
-func getVcapServicesEnv(doer commandDoer, appName string) string {
-	out := doer.run("/usr/local/bin/cf", "files", appName, "logs/env.log")
+func getVcapServicesEnv(runner commandRunner, appName string) string {
+	out := runner.run("/usr/local/bin/cf", "files", appName, "logs/env.log")
 	r, err := regexp.Compile("VCAP_SERVICES=(.*)")
 	if err != nil {
 		panic(err)
@@ -154,7 +154,7 @@ func main() {
 		serviceName = ""
 	}
 
-	finder := serviceFinder{commandDoer: cliCommandDoer{}}
+	finder := serviceFinder{commandRunner: cliCommandRunner{}}
 	err := finder.findAndExec(appName, serviceName)
 	if err != nil {
 		panic(err)

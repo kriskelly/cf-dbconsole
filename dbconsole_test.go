@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-type myCommandDoer struct {
+type myCommandRunner struct {
 	t                 *testing.T
 	execError         error
 	expectedExecArgv0 string
@@ -15,7 +15,7 @@ type myCommandDoer struct {
 	runOutput         string
 }
 
-func (m myCommandDoer) exec(argv0 string, argv []string, envv []string) error {
+func (m myCommandRunner) exec(argv0 string, argv []string, envv []string) error {
 	assert(m.t, argv0 == m.expectedExecArgv0, argv0, "should have been", m.expectedExecArgv0)
 	for i, expectedArg := range m.expectedExecArgv {
 		assert(m.t, expectedArg == argv[i], argv[i], "should have been", expectedArg)
@@ -23,7 +23,7 @@ func (m myCommandDoer) exec(argv0 string, argv []string, envv []string) error {
 	return m.execError
 }
 
-func (m myCommandDoer) run(name string, args ...string) string {
+func (m myCommandRunner) run(name string, args ...string) string {
 	assert(m.t, name == m.expectedRunName, "Bad path to cf")
 	for i, arg := range args {
 		assert(m.t, arg == m.expectedRunArgs[i], "Should have been ", m.expectedRunArgs[i])
@@ -34,7 +34,7 @@ func (m myCommandDoer) run(name string, args ...string) string {
 func TestCanParseServicesFromCloudfoundry(t *testing.T) {
 	servicesEnvVar := `VCAP_SERVICES={"elephantsql-n/a":[{"name":"production-db2","label":"elephantsql-n/a","tags":[],"plan":"free","credentials":{"uri":"postgres://foobar"}}]}`
 	finder := serviceFinder{
-		commandDoer: myCommandDoer{
+		commandRunner: myCommandRunner{
 			t:               t,
 			runOutput:       servicesEnvVar,
 			expectedRunArgs: []string{"files", "foo", "logs/env.log"},
@@ -51,13 +51,13 @@ func TestCanExecElephantSqlServices(t *testing.T) {
 	elephantSql.Credentials = map[string]string{}
 	elephantSql.Credentials["uri"] = "postgres://localhost"
 
-	doer := myCommandDoer{
+	runner := myCommandRunner{
 		t:                 t,
 		execError:         errors.New("foo"),
 		expectedExecArgv0: "/usr/local/bin/psql",
 		expectedExecArgv:  []string{"psql", "postgres://localhost"},
 	}
-	err := elephantSql.exec(doer)
+	err := elephantSql.exec(runner)
 	assert(t, err.Error() == "foo", "error should be foo")
 }
 
@@ -89,13 +89,13 @@ func TestFindsFirstDbByDefault(t *testing.T) {
 
 func TestCanFindClearDbMysqlService(t *testing.T) {
 	servicesEnvVar := `VCAP_SERVICES={"cleardb-n/a":[{"name":"my-cleardb","credentials":{"name":"my-dbname","hostname":"my-hostname","port":"3306","username":"my-user","password":"mypass"}}]}`
-	doer := myCommandDoer{
+	runner := myCommandRunner{
 		t:               t,
 		runOutput:       servicesEnvVar,
 		expectedRunArgs: []string{"files", "foo", "logs/env.log"},
 		expectedRunName: "/usr/local/bin/cf",
 	}
-	finder := serviceFinder{commandDoer: doer}
+	finder := serviceFinder{commandRunner: runner}
 	finder.findAll("foo")
 	actualService := finder.services.ClearDb[0]
 	foundService := finder.find("my-cleardb").(mysqlService)
@@ -114,7 +114,7 @@ func TestCanExecMysqlService(t *testing.T) {
 		},
 	}
 
-	commandDoer := myCommandDoer{
+	commandRunner := myCommandRunner{
 		expectedExecArgv0: "/usr/local/bin/mysql",
 		expectedExecArgv: []string{
 			"mysql",
@@ -130,11 +130,11 @@ func TestCanExecMysqlService(t *testing.T) {
 		},
 	}
 
-	service.exec(commandDoer)
+	service.exec(commandRunner)
 }
 
 func TestMainCanTakeServiceNameAsArg(t *testing.T) {
-	doer := myCommandDoer{
+	runner := myCommandRunner{
 		t:                 t,
 		runOutput:         `VCAP_SERVICES={"elephantsql-n/a":[{"name":"production-db2","label":"elephantsql-n/a","tags":[],"plan":"free","credentials":{"uri":"postgres://foobar"}}, {"name":"babar","label":"elephantsql-n/a","tags":[],"plan":"free","credentials":{"uri":"postgres://babar"}}]}`,
 		expectedRunArgs:   []string{"files", "my-foo-app", "logs/env.log"},
@@ -144,7 +144,7 @@ func TestMainCanTakeServiceNameAsArg(t *testing.T) {
 		expectedExecArgv:  []string{"psql", "postgres://babar"},
 	}
 
-	finder := serviceFinder{commandDoer: doer}
+	finder := serviceFinder{commandRunner: runner}
 	finder.findAndExec("my-foo-app", "babar")
 }
 
